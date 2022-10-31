@@ -1,8 +1,10 @@
 {
   "domain": "deocean",
-  "name": "德能森智能家居(锦城悦庭内网版)",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "name": "德能森",
+  "dependencies": [],
   "codeowners": ["@shellvon"],
+  "requirements": [],
   "iot_class": "local_polling",
   "config_flow": true
 }

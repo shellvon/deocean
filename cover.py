@@ -1,34 +1,43 @@
-'''
-Author: tiany
-Date: 2021-10-13 22:57:07
-LastEditors: tiany
-LastEditTime: 2021-10-15 00:40:00
-Description: 
-'''
 
-
-import logging
-from homeassistant.core import HomeAssistant
+from typing import Any
+from homeassistant.components.cover import CoverEntity, ATTR_POSITION, SUPPORT_OPEN, SUPPORT_CLOSE, SUPPORT_SET_POSITION
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.cover import CoverEntity, ATTR_POSITION, SUPPORT_OPEN , SUPPORT_CLOSE , SUPPORT_SET_POSITION
+from homeassistant.core import HomeAssistant
 
+from .hub import DeoceanDevice, DeoceanGateway, TypeCode
 
 from .const import DOMAIN
-from .api import DeoceanEntity
+import logging
 
-_LOGGER: logging.Logger = logging.getLogger(__package__)
+_LOGGER = logging.getLogger(__package__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    client = hass.data[DOMAIN][entry.entry_id]
-    covers = [
-        DeoceanCover(client=client, **cover) for cover in hass.data[DOMAIN].get('blind', [])
-    ]
-    _LOGGER.debug('found deocean blinds(covers): %s', covers)
-    async_add_entities(covers)
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> bool:
+    hub: DeoceanGateway = hass.data[DOMAIN][entry.entry_id]
+    covers = hub.list_devices(TypeCode.COVER)
+    _LOGGER.warning('发现德能森窗帘:%d 副' % len(covers))
+    async_add_entities([DeoceanCover(cover) for cover in covers])
     return True
 
 
-class DeoceanCover(DeoceanEntity, CoverEntity):
+class DeoceanCover(CoverEntity):
+    """德能森窗帘"""
+
+    def __init__(self, dev: DeoceanDevice):
+        assert dev.type == TypeCode.COVER
+        self.dev = dev
+
+    def added_to_hass(self) -> None:
+        _LOGGER.debug(f'cover {self.dev} added')
+        self.dev.register_update_callback(self.schedule_update_ha_state)
+
+    @property
+    def name(self):
+        return self.dev.name
+
+    @property
+    def unique_id(self):
+        return self.dev.unique_id
 
     @property
     def supported_features(self):
@@ -36,41 +45,17 @@ class DeoceanCover(DeoceanEntity, CoverEntity):
 
     @property
     def current_cover_position(self):
-        return self._state[ATTR_POSITION]
-    
+        return self.dev.position or 0
+
     @property
     def is_closed(self):
-        return self._state[ATTR_POSITION] == 100
+        return self.current_cover_position == 0
 
-    async def async_open_cover(self, **kwargs):
-        self._attr_is_opening = True
-        self._state[ATTR_POSITION] = 0
-        await self._client.async_send_action(self._id, {
-            ATTR_POSITION: 0
-        })
-        self._attr_is_opening = False
+    def open_cover(self, **kwargs: Any) -> None:
+        return self.dev.turn_on()
 
-    async def async_close_cover(self, **kwargs):
-        self._attr_is_closing = True
-        self._state[ATTR_POSITION] = 100
-        await self._client.async_send_action(self._id, {
-            ATTR_POSITION: 100
-        })
-        self._attr_is_closing = False
-    
-    async def async_set_cover_position(self, **kwargs):
-        _LOGGER.debug('德能森窗帘控制:%s -> %s', self._state, kwargs)
-        is_closing = kwargs[ATTR_POSITION] > self.current_cover_position
-        if is_closing:
-            self._attr_is_closing = True
-        else:
-            self._attr_is_opening = True
-        self._state[ATTR_POSITION] = kwargs[ATTR_POSITION]
-        await self._client.async_send_action(self._id, {
-            ATTR_POSITION: kwargs[ATTR_POSITION]
-        })
-        if is_closing:
-            self._attr_is_closing = False
-        else:
-            self._attr_is_opening = False
+    def close_cover(self, **kwargs: Any) -> None:
+        return self.dev.turn_off()
 
+    def set_cover_position(self, **kwargs):
+        self.dev.set_position(kwargs.get(ATTR_POSITION))

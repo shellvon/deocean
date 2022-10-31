@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Please enter your Deocean gateway IP address and port, currently only supports Light/Cover, air conditioners please use zhong_hong directly",
+        "title": "Deocean (Light/Cover) Config",
+        "data": {
+          "host": "Gateway IP",
+          "port": "Gateway Port"
+        }
+      }
+    },
+    "abort": {
+      "one_instance_allowed": "only one instance allowed!"
+    }
+  }
+}

@@ -1,54 +1,56 @@
-from typing import Dict, Any
-from datetime import timedelta
-from .const import DOMAIN
+"""替换掉德能森的Ebelong网关流程
 
+目前本小区使用的网关一共就俩个
+    A. 中弘 HVAC 用来控制中央空调
+    B. Ebelong 用来控制家里灯具/窗帘
+由于Hass已经内置了Zhonghong HVAC，所以不用自己写了，这里重点替换 B，但因为缺少文档，
+所以大多是猜测模拟的。不保证所有功能都可用。
+
+"""
+import socket
 import logging
-import voluptuous as vol
-from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers import config_validation as cv, entity
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import HomeAssistant, EVENT_HOMEASSISTANT_STOP
+from homeassistant.exceptions import ConfigEntryNotReady
+from .hub import DeoceanGateway, register_devices, register_scenes
+from .const import BUILTIN_DEVICES_STR, DOMAIN, BUILTIN_SCENE_STR
 
-from .api import DeoceanAPI
+PLATFORMS = ['light', 'cover']
 
-_LOGGER: logging.Logger  = logging.getLogger(__package__)
-
-PLATFORMS = ['light', 'climate', 'cover']
-
-SCAN_INTERVAL = timedelta(minutes=10)
-
-CONFIG_SCHEMA = vol.Schema(
-    {
-        DOMAIN: vol.Schema(
-            {
-                vol.Required(CONF_HOST): cv.string
-            }
-        )
-    },
-    extra=vol.ALLOW_EXTRA
-)
+_LOGGER = logging.getLogger(__package__)
 
 
-async def async_setup_devices(hass: HomeAssistant, deoceanAPI: DeoceanAPI):
-    devices = {}
-    for device in await deoceanAPI.async_discovery_devices():
-        devices.setdefault(device['deviceType'], []).append(device)
-    hass.data[DOMAIN].update(devices)
-    
-async def async_setup(hass: HomeAssistant, config: Dict[str, Any]):
-    hass.data[DOMAIN] = {}
-    if DOMAIN not in config:
-        return True
-    await async_setup_devices(hass, DeoceanAPI(f'http://{config[DOMAIN].get(CONF_HOST)}', async_get_clientsession(hass, False)))
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    hub = DeoceanGateway(entry.data[CONF_HOST],
+                         entry.data.get(CONF_PORT, 50016))
+    try:
+        _LOGGER.error(
+            f'IP={entry.data[CONF_HOST]}, PORT={entry.data.get(CONF_PORT, 50016)}')
+        hub.start_listen()
+    except socket.error as err:
+        _LOGGER.error(f'失败啦{err}')
+        raise ConfigEntryNotReady from err
+
+    # 注册内置设备
+    register_devices(hub, BUILTIN_DEVICES_STR)
+    # 注册内置场景(面板)
+    register_scenes(hub, BUILTIN_SCENE_STR)
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = hub
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # 也不知道有没有用
+    hass.bus.listen_once(EVENT_HOMEASSISTANT_STOP, hub.stop_listen)
+
     return True
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    deoceanAPI = DeoceanAPI(f'http://{entry.data.get(CONF_HOST)}', async_get_clientsession(hass, False))
-    hass.data[DOMAIN][entry.entry_id] = deoceanAPI
-    await async_setup_devices(hass, deoceanAPI)
-    for component in PLATFORMS:
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(entry, component)
-        )
-    return True
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hub: DeoceanGateway = hass.data[DOMAIN].pop(entry.entry_id)
+        hub.stop_listen()
+    return unload_ok
