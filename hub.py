@@ -56,7 +56,7 @@ class DeoceanGateway:
     该网关并没有文档，通过日志分析(/home/deocean_v2/log/ebelong.log)猜测分析的方式。所以不能保证所有指令方式都支持.
     """
 
-    def __init__(self, ip_addr: str, port: int = 9999):
+    def __init__(self, ip_addr: str, port: int = 9999, timeout: int = None):
         self.ip_addr = ip_addr
         self.port = port or 9999
         self.sock = None
@@ -68,6 +68,7 @@ class DeoceanGateway:
         self._listening = False
         self._thread = None
         self.max_retry = 5
+        self.timeout = timeout or 60
 
     def __get_socket(self) -> socket.socket:
         """
@@ -82,7 +83,7 @@ class DeoceanGateway:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
-        # s.settimeout(10)
+        s.settimeout(self.timeout)
         s.connect((self.ip_addr, self.port))
         return s
 

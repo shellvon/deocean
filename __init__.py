@@ -23,7 +23,7 @@ _LOGGER = logging.getLogger(__package__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hub = DeoceanGateway(entry.data[CONF_HOST],
-                         entry.data.get(CONF_PORT, 50016))
+                         entry.data.get(CONF_PORT, 50016), 10)
     try:
         _LOGGER.debug(
             f'IP={entry.data[CONF_HOST]}, PORT={entry.data.get(CONF_PORT, 50016)}')
