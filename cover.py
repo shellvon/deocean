@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__package__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> bool:
     hub: DeoceanGateway = hass.data[DOMAIN][entry.entry_id]
     covers = hub.list_devices(TypeCode.COVER)
-    _LOGGER.warning('发现德能森窗帘:%d 副' % len(covers))
+    _LOGGER.debug('发现德能森窗帘:%d 副' % len(covers))
     async_add_entities([DeoceanCover(cover) for cover in covers])
     return True
 

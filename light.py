@@ -18,7 +18,7 @@ _LOGGER = logging.getLogger(__package__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> bool:
     hub: DeoceanGateway = hass.data[DOMAIN][entry.entry_id]
     lights = hub.list_devices(TypeCode.LIGHT)
-    _LOGGER.warning('发现德能森灯具:%d 颗' % len(lights))
+    _LOGGER.debug('发现德能森灯具:%d 颗' % len(lights))
     async_add_entities([DeoceanLight(light) for light in lights])
     return True
 
@@ -31,7 +31,7 @@ class DeoceanLight(LightEntity):
         self.dev = dev
 
     async def async_added_to_hass(self) -> None:
-        _LOGGER.warning(f'light {self.dev} added')
+        _LOGGER.debug(f'light {self.dev} added')
         self.dev.register_update_callback(self.schedule_update_ha_state)
 
     @property

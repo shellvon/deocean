@@ -82,7 +82,7 @@ class DeoceanGateway:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
-        s.settimeout(10)
+        # s.settimeout(10)
         s.connect((self.ip_addr, self.port))
         return s
 
@@ -100,7 +100,7 @@ class DeoceanGateway:
             data = self._get_data()
             if not data:
                 continue
-            _LOGGER.debug('recv <---', bytes_debug_str(data))
+            _LOGGER.debug(f'recv <---{bytes_debug_str(data)}')
             for frame in parse_data(data):
                 # 没有设备, 跳过
                 if not frame.device_address:
@@ -627,7 +627,7 @@ def parse_scene_str(txt: str):
             continue
         fields = list(map(lambda x: x.strip(), line.split(',')))
         if len(fields) != 5:
-            _LOGGER.warning('输入scene格式不正确')
+            _LOGGER.warning(f'输入scene格式不正确,{fields}', )
             continue
         yield Scene(fields[0], int(fields[1], 16), int(fields[2]), fields[3].split('|'), fields[4])
 
@@ -743,6 +743,8 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     from .const import BUILTIN_SCENE_STR, BUILTIN_DEVICES_STR
     gw = DeoceanGateway('192.168.5.201', 50016)
+
+    gw.start_listen()
 
     test_light(gw)
 

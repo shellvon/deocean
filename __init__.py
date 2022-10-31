@@ -25,11 +25,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hub = DeoceanGateway(entry.data[CONF_HOST],
                          entry.data.get(CONF_PORT, 50016))
     try:
-        _LOGGER.error(
+        _LOGGER.debug(
             f'IP={entry.data[CONF_HOST]}, PORT={entry.data.get(CONF_PORT, 50016)}')
         hub.start_listen()
     except socket.error as err:
-        _LOGGER.error(f'失败啦{err}')
+        _LOGGER.error(f'德能森监听失败啦:{err}')
         raise ConfigEntryNotReady from err
 
     # 注册内置设备
@@ -41,9 +41,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = hub
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # 也不知道有没有用
-    hass.bus.listen_once(EVENT_HOMEASSISTANT_STOP, hub.stop_listen)
 
     return True
 

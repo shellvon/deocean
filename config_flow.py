@@ -24,7 +24,7 @@ class DeoceanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_HOST, description="IP", default='192.168.201'): str,
+                vol.Required(CONF_HOST, description="IP", default='192.168.5.201'): str,
                 vol.Optional(CONF_PORT, description="PORT", default=50016): vol.All(vol.Coerce(int), vol.Range(min=0)),
             })
         )
