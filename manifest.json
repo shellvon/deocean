@@ -1,10 +1,13 @@
 {
   "domain": "deocean",
   "version": "1.0.0",
-  "name": "德能森",
+  "name": "德能森(Deocean)",
+  "documentation": "https://github.com/shellvon/deocean/blob/main/README.md",
+  "issue_tracker": "https://github.com/shellvon/deocean/issues",
   "dependencies": [],
   "codeowners": ["@shellvon"],
   "requirements": [],
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
+  "homeassistant": "2022.10.5",
   "config_flow": true
 }

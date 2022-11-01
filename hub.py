@@ -110,7 +110,7 @@ class DeoceanGateway:
                     # 搜索貌似没有鸟用
                     continue
                 device = self.get_device(frame.device_address)
-                scene_id = f'{toInt(frame.device_address.mac_address)}:{frame.channel}'
+                scene_id = f'{toInt(frame.device_address.mac_address):08X}:{frame.channel}'
                 # 这里只会找到灯或者窗帘(被添加进去的设备)
                 if device:
                     kwargs = {}
@@ -136,7 +136,7 @@ class DeoceanGateway:
 
         举个例子:
         原德能森的配置文件如下:
-        - 主卧床头布帘按键, panel, 44540400, 8 
+        - 主卧床头布帘按键, panel, 44540400, 8
         即表示面板 主卧床头左(0x44540400) channel 为8 的按键(主卧床头布帘按键)
         他对应的业务逻辑在其数据库中明确事件为toggle 设备为xxx。
         所以我们可以这样:
@@ -153,7 +153,7 @@ class DeoceanGateway:
             raise ValueError('通道必须是1~255的数字值')
         if not callable(action):
             raise ValueError('action必须支持调用')
-        id = f'{toInt(addr)}:{channel}'
+        id = f'{toInt(addr):08X}:{channel}'
         if not force and id in self.scenes:
             raise '已有该场景'
         self.scenes[id] = SceneTask(id, name or f'场景-{id}', action)
@@ -254,7 +254,7 @@ class DeoceanGateway:
                 _LOGGER.error("No response from gateway")
                 continue
             for frame in parse_data(data):
-                print('new devices:', frame)
+                _LOGGER.info('discovery new devices:', frame)
                 if bytes_debug_str(data) == bytes_debug_str(request_data.encode()):
                     discovered = True
         _LOGGER.debug(f"discovery done! resutl={discovered}")
@@ -378,12 +378,11 @@ class DeoceanData(DeoceanStructData):
             msg.append(self.device_address.encode())
             size += self.device_address.length
 
-        is_COVER = self.type == TypeCode.COVER
         padding = [0x01]
         if self.func_code == FuncCode.COVER_POSITION and self.position:
             # 设置位置的时候paddig 不是 0x01, 而是0x02 只有控制开关的时候才是0x01
             padding = [0x02, 0x04, self.position]
-        elif (self.func_code == FuncCode.SYNC and is_COVER):
+        elif (self.func_code == FuncCode.SYNC and self.type == TypeCode.COVER):
             # 因为Control Code 是2bit，append 俩次是为了计算size的时候正确，否则这里需要手动调用一次 size += 1
             v = ControlCode.COVER_SYNC.value
             padding.append(v >> 8)
@@ -570,7 +569,7 @@ def parse_data(data):
             addr = None
             if payload.func_code != FuncCode.SEARCH:
                 if len(msg) < 5:
-                    logging.error('数据格式不合法')
+                    _LOGGER.error('数据格式不合法')
                     data = data[frame_size:]
                     continue
                 addr = toInt(msg[1:5])
@@ -604,31 +603,33 @@ def parse_data(data):
             data = data[1:]  # 往前迁移一字节处理.
             continue
 
-# 工具方法
-
 
 def batch_action(devices: List[DeoceanDevice], op: Literal['turn_on', 'turn_off', 'toggle']):
     """批量触发某些设备的指令
     主要用来兼容之前场景面板按下的场景控制多个设备.
     """
     for device in devices:
-        if op == 'turn_on':
-            device.turn_on()
-        elif op == 'turn_off':
-            device.turn_off()
-        elif op == 'toggle':
-            device.toggle()
+        getattr(device, op)()
 
 
-def parse_scene_str(txt: str):
-    """解析场景配置"""
+def split_txt_to_lines(txt: str, field_cnt=None):
     for line in txt.split('\n'):
         line = line.strip()
         if not line or line.startswith('#'):
             continue
         fields = list(map(lambda x: x.strip(), line.split(',')))
+        if field_cnt:
+            if len(fields) < field_cnt:
+                continue
+            yield fields[:field_cnt]
+        yield fields
+
+
+def parse_scene_str(txt: str):
+    """解析场景配置"""
+    for fields in split_txt_to_lines(txt):
         if len(fields) != 5:
-            _LOGGER.warning(f'输入scene格式不正确,{fields}', )
+            _LOGGER.warning(f'输入scene格式不正确{fields}', )
             continue
         yield Scene(fields[0], int(fields[1], 16), int(fields[2]), fields[3].split('|'), fields[4])
 
@@ -657,17 +658,13 @@ def register_scenes(hub: DeoceanGateway, raw_txt: str):
             else:
                 _LOGGER.warning(f'设备:{dev_name}找不到')
         _LOGGER.debug(f'注册场景:{scene},设备数:{len(effect_devices)}')
-        hub.register_scene(scene.addr, scene.channel, partial(
-            batch_action, devices=list(effect_devices), op=scene.op), scene.name.replace('按键', ''), True)
+        hub.register_scene(scene.addr, scene.channel, lambda: (
+            getattr(dev, scene.op) for dev in effect_devices), scene.name, True)
 
 
 def register_devices(hub: DeoceanGateway, raw_txt: str):
     """工具函数,注册给定的设备到网关"""
-    for line in raw_txt.split('\n'):
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        name, typ, addr = list(map(lambda x: x.strip(), line.split(',')))
+    for (name, typ, addr) in split_txt_to_lines(raw_txt, 3):
         if typ not in ['light', 'blind']:
             _LOGGER.warning('设备仅支持灯具/窗帘')
             continue
@@ -713,7 +710,7 @@ def test_scene(gw: DeoceanGateway):
     register_devices(gw, BUILTIN_DEVICES_STR)
     register_scenes(gw, BUILTIN_SCENE_STR)
 
-    scene = gw.scenes.get('4149478400:8')
+    scene = gw.scenes.get('F7540400:8')  # {4149478400:08X}:8
     print('执行场景:', scene.name)
     scene.action()
 
