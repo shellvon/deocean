@@ -36,3 +36,15 @@ logger:
   logs:
     custom_components.deocean: debug
 ```
+
+如果不想直接在 `hass` 内调试，你可以直接 执行 `python3 -m deocean.hub` 执行相关测试。 [hub.py](./hub.py) 内的代码随意修改调.
+
+如果不需要以相对目录倒入，可以不以 `module` 形式执行。直接 `python3 deocean/hub.py` 即可。 `Python` 基础不在赘诉。
+
+# 其他您可能需要的
+
+- 德能森配套的 [NanoPI-Neo-Plus2](http://nanopi.io/nanopi-neo-plus2.html) 以及[其 Wiki 资料](https://wiki.friendlyelec.com/wiki/index.php/NanoPi_NEO_Plus2)
+- 集成 [HomeKit](https://www.home-assistant.io/integrations/homekit/) 以让苹果的家庭 APP 无缝衔接
+- 集成 [ZhongHong](https://www.home-assistant.io/integrations/zhong_hong/) 以让空调一起加入苹果大家庭
+- 集成 [SmartIR](https://github.com/smartHomeHub/SmartIR) 以让支持红外设备的（比如电视）加入苹果
+- 如何开发一个 Hass 插件的[开发者文档](https://developers.home-assistant.io/docs/creating_component_index)
