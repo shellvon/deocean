@@ -1,4 +1,7 @@
-from typing import Callable, Dict, List, Union, Literal
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+from typing import Callable, Dict, List, Union, Literal, Iterable
 import attr
 import copy
 import enum
@@ -17,14 +20,16 @@ from threading import Thread
 
 _LOGGER = logging.getLogger(__package__)
 
+# 德能森的设备地址是8为的16进制
+Addr = Union[str, int, List[Union[str, int]]]
+
 
 @dataclass
 class Scene:
     name: str
     addr: int
     channel: int
-    devices: List[str]
-    op: Literal['turn_on', 'turn_off', 'toggle']
+    tasks: List[List[str, str]]  # 每一个task 都是 设备名 操作
 
 
 @dataclass
@@ -34,7 +39,14 @@ class SceneTask:
     action: Callable[[], None]
 
 
-def toInt(addr:  Union[str, int, List[Union[str, int]]]) -> int:
+def toInt(addr: Addr) -> int:
+    """德能森的地址都是8位长度16进制
+    地址格式形如:
+        int 数组/原组:  [0xA, 0xB, 0xC, 0xD]
+        str 数组/原组:  ['0xA', '0xB', 'C', '0xD'] # 0x prefix 是可选的
+        int 或 str  :  0x0A0B0C0D
+    返回值都是10进制的统一整数.
+    """
     if isinstance(addr, (tuple, list)):
         if len(addr) != 4:
             raise ValueError('地址为数组时必须4位元素')
@@ -49,6 +61,12 @@ def toInt(addr:  Union[str, int, List[Union[str, int]]]) -> int:
 
 def bytes_debug_str(data: bytes):
     return '[%s]' % ' '.join([f'{x:02X}' for x in bytearray(data)])
+
+
+def batch_action(iter: Iterable, *args, **kwargs):
+    for callback in iter:
+        if callable(callback):
+            callback(*args, **kwargs)
 
 
 class DeoceanGateway:
@@ -110,7 +128,6 @@ class DeoceanGateway:
                     # 搜索貌似没有鸟用
                     continue
                 device = self.get_device(frame.device_address)
-                scene_id = f'{toInt(frame.device_address.mac_address):08X}:{frame.channel}'
                 # 这里只会找到灯或者窗帘(被添加进去的设备)
                 if device:
                     kwargs = {}
@@ -120,14 +137,22 @@ class DeoceanGateway:
                     if frame.ctrl_code in [ControlCode.COVER_OFF,  ControlCode.COVER_ON, ControlCode.LIGHT_OFF, ControlCode.LIGHT_ON]:
                         kwargs['switch_status'] = frame.ctrl_code.name
                     device.update(**kwargs)
-                elif scene_id in self.scenes:
-                    scene_task = self.scenes.get(scene_id)
-                    if callable(scene_task.action):
+                elif frame.channel is not None:
+                    scene_task = self.scenes.get(self.generate_scene_id(
+                        frame.device_address.mac_address, frame.channel))
+                    if scene_task and callable(scene_task.action):
                         _LOGGER.debug(
                             f'触发场景:{scene_task.name}<id={scene_task.id}>')
                         scene_task.action()
 
-    def register_scene(self, addr: Union[str, int, List[Union[str, int]]], channel: int, action: Callable, name: str = None, force: bool = False):
+    def generate_scene_id(self, addr: Addr, channel: int):
+        """生成一个场景ID，场景ID由面板的唯一地址以及按键决定，按键在德能森里面叫channel.
+        比如一个面板有回家/离家 则他们共有相同的addr,但 channel 不同
+        按照德能森现在的情况。channel 都是 2的次方值。比如1/2/4/8 . 因为channel 就一个字节,最大只能到0xFF
+        """
+        return f'{toInt(addr):08X}:{channel}'
+
+    def register_scene(self, addr: Addr, channel: int, action: Callable, name: str = None, force: bool = False):
         """
         注册场景,  该接口由网关收到面板的按钮之后，派送此场景可以做什么.
 
@@ -153,7 +178,7 @@ class DeoceanGateway:
             raise ValueError('通道必须是1~255的数字值')
         if not callable(action):
             raise ValueError('action必须支持调用')
-        id = f'{toInt(addr):08X}:{channel}'
+        id = self.generate_scene_id(addr, channel)
         if not force and id in self.scenes:
             raise '已有该场景'
         self.scenes[id] = SceneTask(id, name or f'场景-{id}', action)
@@ -174,7 +199,7 @@ class DeoceanGateway:
         _LOGGER.info("Start message listen thread %s", thread.ident)
         return True
 
-    def send(self, data) -> None:
+    def send(self, data: DeoceanData) -> None:
         if not self.sock:
             _LOGGER.debug('未建立Socket,假发送: %s' % data.hex())
             for frame in parse_data(data.encode()):
@@ -259,8 +284,11 @@ class DeoceanGateway:
                     discovered = True
         _LOGGER.debug(f"discovery done! resutl={discovered}")
 
-    def add_device(self, device):
+    def add_device(self, device: DeoceanDevice, force: bool = False):
         key = toInt(device.addr.mac_address)
+        if key in self.devices and not force:
+            _LOGGER.warning('已有相同设备')
+            return
         self.devices[key] = device
 
     def get_device(self, addr):
@@ -306,8 +334,10 @@ class ControlCode(enum.Enum):
     LIGHT_ON = 0x0201
     LIGHT_OFF = 0x0200
 
-    COVER_ON = 0x0401
-    COVER_OFF = 0x0402
+    # 打开表示pos = 100
+    COVER_ON = 0x0402
+    # off = pos =0
+    COVER_OFF = 0x0401
 
     # 请求窗帘状态用到控制码
     COVER_SYNC = 0x04FF
@@ -332,7 +362,7 @@ class DeoceanStructData:
 @attr.s(slots=True, hash=True)
 class DeviceAddr(DeoceanStructData):
     """设备地址占4字节"""
-    mac_address = attr.ib(toInt)
+    mac_address: int = attr.ib(converter=toInt)
 
     @property
     def length(self):
@@ -343,12 +373,6 @@ class DeviceAddr(DeoceanStructData):
 
     def __str__(self):
         return f'addr-{self.mac_address:08X}'
-
-
-@attr.s(slots=True, hash=True)
-class DeviceStatus(DeoceanStructData):
-    addr = attr.ib(init=False)  # type: DeviceAddr
-    switch_status = attr.ib()  # Type: ControlCode
 
 
 @attr.s(slots=True)
@@ -419,26 +443,25 @@ class DeoceanDevice:
     德能森网关支持的设备
     """
 
-    def __init__(self, gw: DeoceanGateway, addr: Union[str, int, List[Union[str, int]]], type: TypeCode, name: str = None):
+    def __init__(self, gw: DeoceanGateway, addr: Addr, type: TypeCode, name: str = None):
         self.gw = gw
-        self.addr = DeviceAddr(toInt(addr))
+        self.addr = DeviceAddr(addr)
         self.type = type
-        self.switch_status = None
-        self.position = None  # 窗帘可能有位置.
+        self.switch_status: Union[str, None] = None
+        self.position: Union[int, None] = None  # 窗帘可能有位置.
         self.gw.add_device(self)
-        self.status_callback = []  # type: List[Callable]
+
+        self.status_callback: List[Callable[..., None]] = []
         self._name = name if name else self.type.name
 
     def _call_status_update(self):
-        for func in self.status_callback:
-            if callable(func):
-                func(self)
+        batch_action(self.status_callback, self)
 
     def send(self, data: DeoceanData) -> None:
         if self.gw:
             self.gw.send(data)
 
-    def _ctrl_(self, func_code, ctrl_code=None, pos=None):
+    def _ctrl_(self, func_code: FuncCode, ctrl_code: Union[ControlCode, None] = None, pos: Union[int, None] = None) -> None:
         payload = DeoceanData(func_code)
         payload.type = self.type
         payload.func_code = func_code
@@ -457,7 +480,7 @@ class DeoceanDevice:
                 if pos is None:
                     raise ValueError('窗帘位置必须')
                 elif pos == 0 or pos == 100:
-                    payload.ctrl_code = ControlCode.COVER_OFF if pos == 100 else ControlCode.COVER_ON
+                    payload.ctrl_code = ControlCode.COVER_ON if pos == 100 else ControlCode.COVER_OFF
                     payload.func_code = FuncCode.SWITCH
                 else:
                     payload.position = pos
@@ -475,11 +498,16 @@ class DeoceanDevice:
 
     @property
     def is_on(self):
+        """判断设备是否开"""
         return self.switch_status in [ControlCode.COVER_ON.name, ControlCode.LIGHT_ON.name]
 
+    @property
+    def is_close(self):
+        """判断设备是否处于关"""
+        return self.switch_status in [ControlCode.COVER_OFF.name, ControlCode.LIGHT_OFF.name]
+
     def toggle(self):
-        if self.switch_status is None:
-            self.sync()
+        """开关切换,在没有状态的情况下首次执行会是开"""
         if self.is_on:
             self.turn_off()
         else:
@@ -496,13 +524,13 @@ class DeoceanDevice:
                     TypeCode.LIGHT else ControlCode.COVER_OFF)
 
     def set_position(self, pos: int):
-        """设置窗帘位置(关闭到这个位置,100表示全部完全关闭)"""
+        """设置窗帘位置,hass称100表示完全打开。0是关闭"""
         if self.type != TypeCode.COVER:
             raise ValueError('仅窗帘支持设置位置')
         self._ctrl_(FuncCode.COVER_POSITION, None, pos)
 
     def sync(self):
-        """查询设备(应该也算状态同步)"""
+        """状态同步, 网关搜到消息之后会告知当前灯具/窗帘开关状态"""
         self._ctrl_(FuncCode.SYNC)
 
     def update(self, **kwargs):
@@ -524,7 +552,7 @@ class DeoceanDevice:
             _LOGGER.debug(f'{self} not update')
 
     def __str__(self) -> str:
-        return f'{self.name}<addr={self.unique_id},status={self.switch_status}>'
+        return f'{self.name}<type={self.type.name},addr={self.unique_id},status={self.switch_status}>'
 
     @property
     def name(self):
@@ -532,7 +560,10 @@ class DeoceanDevice:
 
     @property
     def unique_id(self):
-        return f'{self.addr.mac_address:#08}'
+        """
+        See https://www.home-assistant.io/faq/unique_id/
+        """
+        return f'{self.addr.mac_address:08X}'
 
 
 def parse_data(data):
@@ -580,16 +611,19 @@ def parse_data(data):
             payload.type = dev_type
             payload.device_address = addr
             ctrl_code_num = None
-            if len(msg) > 6:  # 4 字节地址 + 1 字节功能 + 1 字节结束符
+            if len(msg) > 6:  # 4 字节地址 + 2 字节功能 + 1 字节结束符0x0D
                 if dev_type == TypeCode.LIGHT:
+                    # 场景值功能区域似乎都是0xEFxx形式。所以后三位一定是0xEFxx0D, xx是channel.
                     if msg[-3] == 0xEF:
                         payload.channel = msg[-2]
                     else:
+                        # 就是普通灯具.提取功能码
                         ctrl_code_num = (msg[-3] << 8) + msg[-2]
-                elif msg[-2] != 0XFF:
+                elif msg[-2] != 0XFF:  # 窗帘有时候返回的0xFF不知道什么意思
                     payload.position = msg[-2] if payload.func_code not in [
                         FuncCode.SWITCH_UPDATED, FuncCode.SWITCH] else None
-                    if msg[-4] == 0x01:  # 窗帘位置设置之后为0x02, 位置是没有控制码的.
+                    # 窗帘位置设置之后为0x02, 位置是没有控制码的.
+                    if msg[-4] == 0x01 and payload.func_code != FuncCode.SYNC:
                         ctrl_code_num = (msg[-3] << 8) + msg[-2]
             try:
                 if ctrl_code_num is not None:
@@ -604,20 +638,13 @@ def parse_data(data):
             continue
 
 
-def batch_action(devices: List[DeoceanDevice], op: Literal['turn_on', 'turn_off', 'toggle']):
-    """批量触发某些设备的指令
-    主要用来兼容之前场景面板按下的场景控制多个设备.
-    """
-    for device in devices:
-        getattr(device, op)()
-
-
-def split_txt_to_lines(txt: str, field_cnt=None):
+def split_txt_to_lines(txt: str, sep: str = ',', field_cnt: Union[int, None] = None):
+    """将字符串txt按照换行符分割之后,用 sep分割成多个list, 如果指定了field_cnt则分片成这么多(保证一定有这么多)"""
     for line in txt.split('\n'):
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        fields = list(map(lambda x: x.strip(), line.split(',')))
+        fields = list(map(lambda x: x.strip(), line.split(sep)))
         if field_cnt:
             if len(fields) < field_cnt:
                 continue
@@ -626,45 +653,105 @@ def split_txt_to_lines(txt: str, field_cnt=None):
 
 
 def parse_scene_str(txt: str):
-    """解析场景配置"""
+    """解析场景配置
+
+    场景配置格式为: name, addr, channel, devices, op
+    其中devices 是已经add 的设备名。多个名字使用|分割.
+    """
     for fields in split_txt_to_lines(txt):
-        if len(fields) != 5:
-            _LOGGER.warning(f'输入scene格式不正确{fields}', )
+        size = len(fields)
+        if size not in [4, 5]:
+            _LOGGER.error(f'场景配置不合法(列数必须是4):{fields}')
             continue
-        yield Scene(fields[0], int(fields[1], 16), int(fields[2]), fields[3].split('|'), fields[4])
+        tasks = []
+        for dev in fields[3].split('|'):
+            if dev.count(':'):
+                dev, op = dev.split(':')
+            elif size == 5:
+                op = fields[4]
+            else:
+                _LOGGER.error(f'场景配置不合法:{fields}')
+                continue
+            tasks.append([dev, op])
+        yield Scene(fields[0], int(fields[1], 16), int(fields[2]), tasks)
 
 
 def register_scenes(hub: DeoceanGateway, raw_txt: str):
     """
-    工具函数. 注册场景
+    工具函数. 注册场景.
+
+    场景配置格式类似CSV。即以逗号隔开分组。如果是注释可以以 # 开头。
+    name, addr, channel, devices, op
+    其中devices 是已经add 的设备名。多个名字使用|分割.
+    特殊设备名包括:
+        all :不区分设备类型，所有设备
+        all_light: 所有灯具
+        all_cover: 所有窗帘
+    比如配置可以是
+    '
+    # 这一行为注释，地址为16进制数字。0x前缀可以省略。 op目前支持 turn_on turn_off toggle 三种。
+    # 表示按下回家按钮的时候, 所有灯以及客厅的布帘需要处于打开状态
+    回家, 0x0A0B0C0D, 2, all_light|客厅布帘, turn_on
+    '
+    如果您想更骚气一点:
+        如你所见，在同一个场景下把A设备打开,B设备关闭,C设备toggle的状态。
+    但如果需要这么做,我们可以扩展格式:
+    '
+    # 所有灯具先turn_off关闭。然后窗帘没有指定则用默认值 turn_on, 过道灯虽然也在all_light中被先关闭了，此处你可以再toggle一次。
+    # 实际情况下，可能因为 前面all_light灯具状态没有返回就已经执行toggle了，所以可能会出现toggle状态弄错的问题
+    #
+    回家, 0x0A0B0C0D, 2, all_light:turn_off|客厅布帘|过道灯:toggle, turn_on
+    '
     """
     all_lights = hub.list_devices(TypeCode.LIGHT)
     all_cover = hub.list_devices(TypeCode.COVER)
 
     devices_map = {dev.name: dev for dev in hub.devices.values()}
 
+    def operation_wrapper(dev: DeoceanDevice, op: str):
+        """
+        把场景的op转成设备可以支持的指令
+        """
+        if op in ['turn_on', 'turn_off', 'toggle', 'sync']:
+            return getattr(dev, op)
+        if dev.type != TypeCode.COVER:
+            _LOGGER.warning(f'仅窗帘支持位置指令,但给定类型为:{dev.type}')
+            return
+        try:
+            op = max(min(int(op), 100), 0)
+        except:
+            _LOGGER.error(f'不支持的指令:{op}')
+            return
+        return partial(dev.set_position, op)
+
     for scene in parse_scene_str(raw_txt):
-        effect_devices: set[DeoceanDevice] = set()
-        for dev_name in scene.devices:
-            if dev_name == 'all':
-                effect_devices.update(all_lights)
-                effect_devices.update(all_cover)
-            elif dev_name == 'all-light':
-                effect_devices.update(all_lights)
-            elif dev_name == 'all-cover':
-                effect_devices.update(all_cover)
+        # 集合以去重
+        callback = set()
+        for (dev_name, op) in scene.tasks:
+            if dev_name in ['all_light', 'all_cover', 'all']:
+                if dev_name != 'all_cover':
+                    callback.update({operation_wrapper(dev, op)
+                                     for dev in all_lights})
+                if dev_name != 'all_light':
+                    callback.update({operation_wrapper(dev, op)
+                                     for dev in all_cover})
             elif dev_name in devices_map:
-                effect_devices.add(devices_map.get(dev_name))
+                callback.add(operation_wrapper(devices_map.get(dev_name), op))
             else:
                 _LOGGER.warning(f'设备:{dev_name}找不到')
-        _LOGGER.debug(f'注册场景:{scene},设备数:{len(effect_devices)}')
-        hub.register_scene(scene.addr, scene.channel, lambda: (
-            getattr(dev, scene.op) for dev in effect_devices), scene.name, True)
+        # 过滤掉所有不支持的回调
+        callback = {cb for cb in callback if cb is not None}
+        if (size := len(callback)) == 0:
+            continue
+        _LOGGER.debug(f'注册场景:{scene},设备数:{size}')
+
+        hub.register_scene(scene.addr, scene.channel,
+                           partial(batch_action, callback), scene.name, True)
 
 
 def register_devices(hub: DeoceanGateway, raw_txt: str):
     """工具函数,注册给定的设备到网关"""
-    for (name, typ, addr) in split_txt_to_lines(raw_txt, 3):
+    for (name, typ, addr) in split_txt_to_lines(raw_txt, ',', 3):
         if typ not in ['light', 'blind']:
             _LOGGER.warning('设备仅支持灯具/窗帘')
             continue
@@ -707,19 +794,24 @@ def test_cover(gw: DeoceanGateway):
 
 def test_scene(gw: DeoceanGateway):
     print('--------------------模拟场景--------------------')
+    from .const import BUILTIN_SCENE_STR, BUILTIN_DEVICES_STR
     register_devices(gw, BUILTIN_DEVICES_STR)
     register_scenes(gw, BUILTIN_SCENE_STR)
-
-    scene = gw.scenes.get('F7540400:8')  # {4149478400:08X}:8
-    print('执行场景:', scene.name)
-    scene.action()
+    scene_id = gw.generate_scene_id('F7540400', 8)
+    scene = gw.scenes.get(scene_id)
+    if scene:
+        print('执行场景:', scene.name)
+        scene.action()
+    else:
+        print(
+            f'-->需要配置场景后才可以执行, scene_id={scene_id},已存在的场景:', gw.scenes.keys())
 
 
 def test_decode():
     # 命令文本来自:
     # grep -E 'Set(Position|Switch)' ebelong.log | cut -d : -f7-8
     sendCmdText = '''
-    data: 7E 08 0D 8B 55 04 00 02 EF 01 0D
+    data: 55 AA 09 0D 74 C1 5D 78 01 04 61 0D
     '''.split('\n')
 
     no = 0
@@ -731,7 +823,7 @@ def test_decode():
         no += 1
         print('try parse ->', cmd)
         cmd = b''.join([struct.pack('B', int(val, 16))
-                       for val in cmd.strip().split(' ')])
+                        for val in cmd.strip().split(' ')])
 
         for frame in parse_data(cmd):
             print('\t', frame)
@@ -739,7 +831,6 @@ def test_decode():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    from .const import BUILTIN_SCENE_STR, BUILTIN_DEVICES_STR
     gw = DeoceanGateway('192.168.5.201', 50016)
 
     gw.start_listen()

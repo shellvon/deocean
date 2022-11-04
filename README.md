@@ -25,6 +25,17 @@
 2. 将本项目放入 hass 的 `config/custom_components` 目录。如果没有则新建
 3. 进入 hass 后台，在集成中搜索 `deocean` 或者 `德能森` 即可
 
+> 德能森关闭方式: 编辑 `/etc/rc.local` 文件，将德能森的相关配置关闭。比如像如下注释: 否则设备重启后可能会让 hass 失效（因为 hass 启动可能更慢）
+
+```bash
+#cd /home/deocean
+#./daemon_deocean.sh &
+#cd /home/deocean_v2
+#./start.sh &
+#./deocean_daemon.sh &
+#exit 0
+```
+
 # 调试方式
 
 代码内大部分日志都是 `DEBUG` 你可以参考 [此处](https://www.home-assistant.io/integrations/logger/) 配置查看日志:

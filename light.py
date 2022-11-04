@@ -1,4 +1,6 @@
 
+# -*- coding: utf-8 -*-
+
 import logging
 from typing import Any
 from homeassistant.components.light import LightEntity, COLOR_MODE_ONOFF

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """替换掉德能森的Ebelong网关流程
 
 目前本小区使用的网关一共就俩个
@@ -11,7 +13,7 @@ import socket
 import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import HomeAssistant, EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from .hub import DeoceanGateway, register_devices, register_scenes
 from .const import BUILTIN_DEVICES_STR, DOMAIN, BUILTIN_SCENE_STR
@@ -26,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                          entry.data.get(CONF_PORT, 50016), 10)
     try:
         _LOGGER.debug(
-            f'IP={entry.data[CONF_HOST]}, PORT={entry.data.get(CONF_PORT, 50016)}')
+            f'尝试监听 IP={entry.data[CONF_HOST]}, PORT={entry.data.get(CONF_PORT, 50016)}')
         hub.start_listen()
     except socket.error as err:
         _LOGGER.error(f'德能森监听失败啦:{err}')

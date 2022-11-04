@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 在manifest.json 中配置 config_flow为 true 既可以开启可视化UI配置.
 参考文档:
