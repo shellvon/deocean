@@ -20,7 +20,7 @@ from threading import Thread
 
 _LOGGER = logging.getLogger(__package__)
 
-# 德能森的设备地址是8为的16进制
+# 德能森的设备地址是8位的16进制
 Addr = Union[str, int, List[Union[str, int]]]
 
 
@@ -156,8 +156,8 @@ class DeoceanGateway:
         """
         注册场景,  该接口由网关收到面板的按钮之后，派送此场景可以做什么.
 
-        需要注意的是，面板和灯具/窗帘ID不可重复.否则场景无效.
-        一个面板上可以有多个按键。一次需要chanel。 同一个面板 addr 一样。 channel不一样 可以标注不同的按钮
+        需要注意的是，面板和灯具/窗帘ID不可重复.否则场景无效。
+        一个面板上可以有多个按键。每一个按键对应一个channel。 同一个面板 addr 一样。 channel不一样 可以标注不同的按钮。
 
         举个例子:
         原德能森的配置文件如下:
@@ -762,7 +762,7 @@ def register_devices(hub: DeoceanGateway, raw_txt: str):
         _LOGGER.debug(f'德能森: {dev} added to {hub}')
 
 
-########    测试方法 #####
+######## 测试方法 #####
 
 
 def test_light(gw: DeoceanGateway):
