@@ -1,23 +1,21 @@
-
 # -*- coding: utf-8 -*-
 
-from typing import Any
-from homeassistant.components.cover import CoverEntity, DEVICE_CLASS_CURTAIN, ATTR_POSITION, SUPPORT_OPEN, SUPPORT_CLOSE, SUPPORT_SET_POSITION
+from homeassistant.components.cover import (
+    CoverEntity,
+    CoverDeviceClass,
+    CoverEntityFeature,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .const import DOMAIN
 from .hub import DeoceanDevice, DeoceanGateway, TypeCode
 
-from .const import DOMAIN
-import logging
-
-_LOGGER = logging.getLogger(__package__)
-
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+) -> bool:
     hub: DeoceanGateway = hass.data[DOMAIN][entry.entry_id]
     covers = hub.list_devices(TypeCode.COVER)
-    _LOGGER.debug('发现德能森窗帘:%d 副' % len(covers))
     async_add_entities([DeoceanCover(cover) for cover in covers])
     return True
 
@@ -25,14 +23,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class DeoceanCover(CoverEntity):
     """德能森窗帘"""
 
+    _attr_device_class = CoverDeviceClass.CURTAIN
+
     def __init__(self, dev: DeoceanDevice):
         assert dev.type == TypeCode.COVER
         self.dev = dev
-        self._attr_device_class = DEVICE_CLASS_CURTAIN
         self.target_pos = None
+        self.should_poll = False
 
     def added_to_hass(self) -> None:
-        _LOGGER.debug(f'cover {self.dev} added')
         self.dev.register_update_callback(self.schedule_update_ha_state)
 
     @property
@@ -45,7 +44,11 @@ class DeoceanCover(CoverEntity):
 
     @property
     def supported_features(self):
-        return SUPPORT_OPEN | SUPPORT_CLOSE | SUPPORT_SET_POSITION
+        return (
+            CoverEntityFeature.OPEN
+            | CoverEntityFeature.CLOSE
+            | CoverEntityFeature.SET_POSITION
+        )
 
     @property
     def current_cover_position(self):
@@ -72,16 +75,16 @@ class DeoceanCover(CoverEntity):
             return None
         return self.target_pos < self.current_cover_position
 
-    def open_cover(self, **kwargs: Any) -> None:
-        kwargs[ATTR_POSITION] = 100
+    def open_cover(self, **kwargs) -> None:
+        kwargs["position"] = 100
         # 这样可以设置target_pos 从而准确判断是否开启/关闭
         self.set_cover_position(**kwargs)
 
-    def close_cover(self, **kwargs: Any) -> None:
-        kwargs[ATTR_POSITION] = 0
+    def close_cover(self, **kwargs) -> None:
+        kwargs["position"] = 0
         self.set_cover_position(**kwargs)
 
     def set_cover_position(self, **kwargs):
-        target_pos = kwargs.get(ATTR_POSITION)
+        target_pos = kwargs.get("position")
         self.target_pos = target_pos
         self.dev.set_position(target_pos)

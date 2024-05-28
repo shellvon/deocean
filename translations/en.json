@@ -11,7 +11,8 @@
       }
     },
     "abort": {
-      "one_instance_allowed": "only one instance allowed!"
+      "one_instance_allowed": "only one instance allowed!",
+      "can_not_establish_connection": "can not establish connection"
     }
   }
 }

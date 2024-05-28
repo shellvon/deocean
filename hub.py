@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Union, Literal, Iterable
+from typing import Callable, Dict, List, Union, Iterable
 import attr
 import copy
 import enum
@@ -17,12 +17,8 @@ from sys import platform
 from functools import partial
 from threading import Thread
 
-
-_LOGGER = logging.getLogger(__package__)
-
 # 德能森的设备地址是8位的16进制
 Addr = Union[str, int, List[Union[str, int]]]
-
 
 @dataclass
 class Scene:
@@ -68,7 +64,6 @@ def batch_action(iter: Iterable, *args, **kwargs):
         if callable(callback):
             callback(*args, **kwargs)
 
-
 class DeoceanGateway:
     """
     该网关并没有文档，通过日志分析(/home/deocean_v2/log/ebelong.log)猜测分析的方式。所以不能保证所有指令方式都支持.
@@ -92,7 +87,6 @@ class DeoceanGateway:
         """
         工具函数,打开一个连接好的Socket.
         """
-        _LOGGER.debug("Opening socket to (%s, %s)", self.ip_addr, self.port)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if platform in ('linux', 'linux2'):
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE,
@@ -119,7 +113,6 @@ class DeoceanGateway:
             data = self._get_data()
             if not data:
                 continue
-            _LOGGER.debug(f'recv <---{bytes_debug_str(data)}')
             for frame in parse_data(data):
                 # 没有设备, 跳过
                 if not frame.device_address:
@@ -141,8 +134,6 @@ class DeoceanGateway:
                     scene_task = self.scenes.get(self.generate_scene_id(
                         frame.device_address.mac_address, frame.channel))
                     if scene_task and callable(scene_task.action):
-                        _LOGGER.debug(
-                            f'触发场景:{scene_task.name}<id={scene_task.id}>')
                         scene_task.action()
 
     def generate_scene_id(self, addr: Addr, channel: int):
@@ -196,31 +187,19 @@ class DeoceanGateway:
         self._thread = thread
         thread.daemon = True
         thread.start()
-        _LOGGER.info("Start message listen thread %s", thread.ident)
         return True
 
     def send(self, data: DeoceanData) -> None:
-        if not self.sock:
-            _LOGGER.debug('未建立Socket,假发送: %s' % data.hex())
-            for frame in parse_data(data.encode()):
-                _LOGGER.debug(frame)
-            return
-
         def _send(retry_count):
             try:
                 self.sock.settimeout(10.0)
-                _LOGGER.debug("send >> %s", data.hex())
                 self.sock.send(data.encode())
                 self.sock.settimeout(None)
 
             except socket.timeout:
-                _LOGGER.error("Connot connect to gateway %s:%s", self.ip_addr,
-                              self.port)
                 return
 
             except OSError as e:
-                if e.errno == 32:  # Broken pipe
-                    _LOGGER.error("OSError 32 raise, Broken pipe", exc_info=e)
                 if retry_count < self.max_retry:
                     retry_count += 1
                     self.open_socket()
@@ -231,63 +210,25 @@ class DeoceanGateway:
     def stop_listen(self):
         self._listening = False
         if self.sock:
-            _LOGGER.info('Closing socket.')
             self.sock.close()
             self.sock = None
-        self._thread.join()
+        if self._thread:
+            self._thread.join()
 
     def _get_data(self):
         if self.sock is None:
             self.open_socket()
-
         try:
             return self.sock.recv(1024)
-
         except ConnectionResetError:
-            _LOGGER.debug("Connection reset by peer")
             self.open_socket()
-
-        except socket.timeout as e:
-            _LOGGER.error("timeout error", exc_info=e)
-
-        except OSError as e:
-            if e.errno == 9:  # when socket close, errorno 9 will raise
-                _LOGGER.debug("OSError 9 raise, socket is closed")
-
-            else:
-                _LOGGER.error("unknown error when recv", exc_info=e)
-
-        except Exception as e:
-            _LOGGER.error("unknown error when recv", exc_info=e)
-
+        except:
+            pass
         return None
-
-    def discovery_devices(self):
-        """自定义的设备发现不齐全"""
-
-        _LOGGER.debug("search devices")
-        if self.sock is None:
-            self.open_socket()
-        request_data = DeoceanData(FuncCode.SEARCH)
-        request_data.type = TypeCode.LIGHT
-        _LOGGER.debug("send discovery request: %s", request_data.hex())
-        self.send(request_data)
-        discovered = False
-        while not discovered:
-            data = self._get_data()
-            if data is None:
-                _LOGGER.error("No response from gateway")
-                continue
-            for frame in parse_data(data):
-                _LOGGER.info('discovery new devices:', frame)
-                if bytes_debug_str(data) == bytes_debug_str(request_data.encode()):
-                    discovered = True
-        _LOGGER.debug(f"discovery done! resutl={discovered}")
 
     def add_device(self, device: DeoceanDevice, force: bool = False):
         key = toInt(device.addr.mac_address)
         if key in self.devices and not force:
-            _LOGGER.warning('已有相同设备')
             return
         self.devices[key] = device
 
@@ -473,8 +414,6 @@ class DeoceanDevice:
         if self.type == TypeCode.LIGHT:
             if func_code not in [FuncCode.SYNC, FuncCode.SWITCH]:
                 raise ValueError('灯具仅支持查询/开关')
-            if pos is not None:
-                _LOGGER.warning('灯具位置参数忽略.')
         elif self.type == TypeCode.COVER:
             if func_code == FuncCode.COVER_POSITION:
                 if pos is None:
@@ -546,10 +485,7 @@ class DeoceanDevice:
                 dirty = self.switch_status != switch_status
             self.switch_status = switch_status
         if dirty:
-            _LOGGER.debug(f'{self} updated: {kwargs}', )
             self._call_status_update()
-        else:
-            _LOGGER.debug(f'{self} not update')
 
     def __str__(self) -> str:
         return f'{self.name}<type={self.type.name},addr={self.unique_id},status={self.switch_status}>'
@@ -579,7 +515,6 @@ def parse_data(data):
             elif dev_type == TypeCode.COVER:
                 placeholder, msg_size = struct.unpack('BB', data[1:3])
                 if placeholder != 0xAA:
-                    _LOGGER.warning(f'占位符不是0xAA')
                     data = data[3:]
                     continue
                 start_at += 1  # 多一个占位符AA.
@@ -587,20 +522,16 @@ def parse_data(data):
             # 起始点包括header 1～2字节。消息体 size字节 + 结束符一字节.
             frame_size = start_at + msg_size + 1
             if len(data) < frame_size:
-                _LOGGER.error(
-                    f"数据长度不足,期望长度{frame_size},实际长度{len(data)}, 数据源:{bytes_debug_str(data)}")
                 return data
             frame = data[start_at:frame_size]
             msg = struct.unpack('B' * len(frame), frame)
             if msg[-1] != STOP_BIT:
-                _LOGGER.warning(f'没有发现终止符,跳过本数据: {bytes_debug_str(data)}')
                 data = data[frame_size:]
                 continue
             payload = DeoceanData(FuncCode(msg[0]))
             addr = None
             if payload.func_code != FuncCode.SEARCH:
                 if len(msg) < 5:
-                    _LOGGER.error('数据格式不合法')
                     data = data[frame_size:]
                     continue
                 addr = toInt(msg[1:5])
@@ -630,8 +561,7 @@ def parse_data(data):
                     payload.ctrl_code = ControlCode(ctrl_code_num)
                 yield payload
             except ValueError:
-                _LOGGER.error('Unknown Control Code: %s' %
-                              bytes_debug_str(data))
+                pass
             data = data[frame_size:]  # 等待新消息
         except Exception as e:
             data = data[1:]  # 往前迁移一字节处理.
@@ -661,7 +591,6 @@ def parse_scene_str(txt: str):
     for fields in split_txt_to_lines(txt):
         size = len(fields)
         if size not in [4, 5]:
-            _LOGGER.error(f'场景配置不合法(列数必须是4):{fields}')
             continue
         tasks = []
         for dev in fields[3].split('|'):
@@ -670,7 +599,6 @@ def parse_scene_str(txt: str):
             elif size == 5:
                 op = fields[4]
             else:
-                _LOGGER.error(f'场景配置不合法:{fields}')
                 continue
             tasks.append([dev, op])
         yield Scene(fields[0], int(fields[1], 16), int(fields[2]), tasks)
@@ -715,12 +643,10 @@ def register_scenes(hub: DeoceanGateway, raw_txt: str):
         if op in ['turn_on', 'turn_off', 'toggle', 'sync']:
             return getattr(dev, op)
         if dev.type != TypeCode.COVER:
-            _LOGGER.warning(f'仅窗帘支持位置指令,但给定类型为:{dev.type}')
             return
         try:
             op = max(min(int(op), 100), 0)
         except:
-            _LOGGER.error(f'不支持的指令:{op}')
             return
         return partial(dev.set_position, op)
 
@@ -737,13 +663,10 @@ def register_scenes(hub: DeoceanGateway, raw_txt: str):
                                      for dev in all_cover})
             elif dev_name in devices_map:
                 callback.add(operation_wrapper(devices_map.get(dev_name), op))
-            else:
-                _LOGGER.warning(f'设备:{dev_name}找不到')
         # 过滤掉所有不支持的回调
         callback = {cb for cb in callback if cb is not None}
         if (size := len(callback)) == 0:
             continue
-        _LOGGER.debug(f'注册场景:{scene},设备数:{size}')
 
         hub.register_scene(scene.addr, scene.channel,
                            partial(batch_action, callback), scene.name, True)
@@ -753,13 +676,11 @@ def register_devices(hub: DeoceanGateway, raw_txt: str):
     """工具函数,注册给定的设备到网关"""
     for (name, typ, addr) in split_txt_to_lines(raw_txt, ',', 3):
         if typ not in ['light', 'blind']:
-            _LOGGER.warning('设备仅支持灯具/窗帘')
             continue
         dev = DeoceanDevice(hub, addr, TypeCode.COVER if typ ==
                             'blind' else TypeCode.LIGHT, name)
         hub.add_device(dev)  # 加入当前设备
         dev.sync()  # 网关有此设备后同步一次状态
-        _LOGGER.debug(f'德能森: {dev} added to {hub}')
 
 
 ######## 测试方法 #####

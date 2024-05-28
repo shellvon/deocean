@@ -1,10 +1,9 @@
 # 德能森(纯净版)
 
+> 最新版支持 `hass-2024.5.5`
+
 > 该版本只支持 窗帘/灯具。 空调需要搭配 [zhong_hong](https://www.home-assistant.io/integrations/zhong_hong/) 使用
 > 该方案旨在去掉德能森中控以及 mqtt。资料: 思路可以参见这里[德能森技术分析](https://docs.qq.com/doc/DQmNHdnFpVlF3UWVZ)
-> 该代码在 `hass-2022.10.5` 版本下成功运行。
-
-目前本人已于 2022.11.04 切换自此版本。且已尽最大努力完善相关资料以及文档，力求谁都可以用得上，愿意尝鲜的欢迎适用 👏👏👏。
 
 因为没有文档，所有内容均为主观臆断。
 
@@ -53,7 +52,7 @@ logger:
 
 如果不想直接在 `hass` 内调试，你可以直接 执行 `python3 -m deocean.hub` 执行相关测试。 [hub.py](./hub.py) 内的代码随意修改调.
 
-如果不需要以相对目录导入，可以不以 `module` 形式执行。直接 `python3 deocean/hub.py` 即可。 `Python` 基础不在赘诉。
+如果不需要以相对目录导入，可以不以 `module` 形式执行。直接 `python3 deocean/hub.py` 即可。
 
 # 其他您可能需要的
 
@@ -61,3 +60,9 @@ logger:
 - 集成 [HomeKit](https://www.home-assistant.io/integrations/homekit/) 以让苹果的家庭 APP 无缝衔接
 - 集成 [ZhongHong](https://www.home-assistant.io/integrations/zhong_hong/) 以让空调一起加入苹果大家庭- 集成 [SmartIR](https://github.com/smartHomeHub/SmartIR) 以让支持红外设备的（比如电视）加入苹果
 - 如何开发一个 Hass 插件的[开发者文档](https://developers.home-assistant.io/docs/creating_component_index)
+
+# Change Logs 
+
+- **24.05.28** 使用新版 HA API 以修复`Deprecated` 提示和删除没用日志,并将版本号设置为`1.1.0`
+- **22.11.04** 去掉MQTT等外部依赖，改为自己实现网关
+- **21.10.09** 首个版本
