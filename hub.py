@@ -129,7 +129,15 @@ class DeoceanGateway:
                     # 开关状态
                     if frame.ctrl_code in [ControlCode.COVER_OFF,  ControlCode.COVER_ON, ControlCode.LIGHT_OFF, ControlCode.LIGHT_ON]:
                         kwargs['switch_status'] = frame.ctrl_code.name
-                    device.update(**kwargs)
+                        # 对于窗帘，如果没有明确的位置信息，根据开关状态推断位置
+                        if device.type == TypeCode.COVER and frame.position is None:
+                            if frame.ctrl_code == ControlCode.COVER_ON:
+                                kwargs['position'] = 100
+                            elif frame.ctrl_code == ControlCode.COVER_OFF:
+                                kwargs['position'] = 0
+                    # 如果有任何更新内容，就调用update
+                    if kwargs:
+                        device.update(**kwargs)
                 elif frame.channel is not None:
                     scene_task = self.scenes.get(self.generate_scene_id(
                         frame.device_address.mac_address, frame.channel))
@@ -310,7 +318,7 @@ class DeviceAddr(DeoceanStructData):
         return 4
 
     def encode(self):
-        return struct.pack('>i', self.mac_address)
+        return struct.pack('>I', self.mac_address)
 
     def __str__(self):
         return f'addr-{self.mac_address:08X}'
@@ -347,6 +355,9 @@ class DeoceanData(DeoceanStructData):
         if self.func_code == FuncCode.COVER_POSITION and self.position:
             # 设置位置的时候paddig 不是 0x01, 而是0x02 只有控制开关的时候才是0x01
             padding = [0x02, 0x04, self.position]
+        elif self.func_code == FuncCode.POSITION_UPDATED and self.position is not None:
+            # 位置更新响应，包含位置信息
+            padding = [self.position]
         elif (self.func_code == FuncCode.SYNC and self.type == TypeCode.COVER):
             # 因为Control Code 是2bit，append 俩次是为了计算size的时候正确，否则这里需要手动调用一次 size += 1
             v = ControlCode.COVER_SYNC.value
@@ -475,7 +486,17 @@ class DeoceanDevice:
     def update(self, **kwargs):
         """更新请使用此接口,方便状态同步"""
         dirty = False
-        if (pos := kwargs.get('position')) is not None and self.type:
+        if (pos := kwargs.get('position')) is not None and self.type == TypeCode.COVER:
+            dirty = self.position != pos
+            self.position = pos
+            # 对于窗帘，根据位置自动推断开关状态
+            if pos > 0 and self.switch_status != ControlCode.COVER_ON.name:
+                self.switch_status = ControlCode.COVER_ON.name
+                dirty = True
+            elif pos == 0 and self.switch_status != ControlCode.COVER_OFF.name:
+                self.switch_status = ControlCode.COVER_OFF.name
+                dirty = True
+        elif (pos := kwargs.get('position')) is not None and self.type == TypeCode.LIGHT:
             dirty = self.position != pos
             self.position = pos
         if (switch_status := kwargs.get('switch_status')) is not None:

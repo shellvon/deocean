@@ -31,8 +31,17 @@ class DeoceanCover(CoverEntity):
         self.target_pos = None
         self.should_poll = False
 
-    def added_to_hass(self) -> None:
-        self.dev.register_update_callback(self.schedule_update_ha_state)
+    async def async_added_to_hass(self) -> None:
+        self.dev.register_update_callback(self._on_device_update)
+    
+    def _on_device_update(self, device):
+        """设备状态更新回调"""
+        # 当设备状态更新时，清除目标位置，避免一直显示opening/closing
+        if self.target_pos is not None:
+            current_pos = self.current_cover_position
+            if current_pos is not None and abs(current_pos - self.target_pos) <= 5:
+                self.target_pos = None
+        self.schedule_update_ha_state()
 
     @property
     def name(self):
@@ -53,11 +62,15 @@ class DeoceanCover(CoverEntity):
     @property
     def current_cover_position(self):
         """返回当前位置,如果设置开关,并不会直接返回position"""
+        # 如果有具体位置信息，优先使用位置信息
+        if self.dev.position is not None:
+            return self.dev.position
+        # 否则根据开关状态推断位置
         if self.dev.is_on:
             return 100
         if self.dev.is_close:
             return 0
-        return self.dev.position
+        return None
 
     @property
     def is_closed(self):
