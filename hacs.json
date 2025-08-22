@@ -1,0 +1,6 @@
+{
+  "name": "德能森(Deocean)",
+  "homeassistant": "2024.5.5",
+  "domains": ["light", "cover"],
+  "iot_class": "Local Polling"
+}

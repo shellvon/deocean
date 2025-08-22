@@ -2,17 +2,81 @@
   "config": {
     "step": {
       "user": {
-        "description": "Please enter your Deocean gateway IP address and port, currently only supports Light/Cover, air conditioners please use zhong_hong directly",
-        "title": "Deocean (Light/Cover) Config",
+        "description": "Please enter your Deocean gateway IP address and port",
+        "title": "Deocean Gateway Connection",
         "data": {
           "host": "Gateway IP",
           "port": "Gateway Port"
         }
+      },
+      "devices": {
+        "description": "Configure your devices (lights and covers). One device per line. Format: Device Name, Type (light|blind), Address. Lines starting with # are comments.",
+        "title": "Device Configuration",
+        "data": {
+          "devices": "Device Configuration (Multi-line)"
+        }
+      },
+      "scenes": {
+        "description": "Configure your scenes. One scene per line. Format: Scene Name, Panel Address, Channel, Device Names, Operation. Lines starting with # are comments.",
+        "title": "Scene Configuration",
+        "data": {
+          "scenes": "Scene Configuration (Multi-line)"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "Failed to connect to gateway"
+    },
     "abort": {
-      "one_instance_allowed": "only one instance allowed!",
-      "can_not_establish_connection": "can not establish connection"
+      "single_instance_allowed": "Only one instance allowed",
+      "cannot_connect": "Cannot establish connection"
+    }
+  },
+  "options": {
+    "step": {
+      "menu": {
+        "title": "Deocean Configuration",
+        "menu_options": {
+          "devices": "Manage All Devices",
+          "scenes": "Manage All Scenes",
+          "add_device": "Add Single Device",
+          "add_scene": "Add Single Scene"
+        }
+      },
+      "devices": {
+        "title": "Device Configuration",
+        "description": "Edit all device configurations. One device per line, lines starting with # are comments.",
+        "data": {
+          "devices": "Device Configuration (Multi-line)"
+        }
+      },
+      "scenes": {
+        "title": "Scene Configuration",
+        "description": "Edit all scene configurations. One scene per line, lines starting with # are comments.",
+        "data": {
+          "scenes": "Scene Configuration (Multi-line)"
+        }
+      },
+      "add_device": {
+        "title": "Add Device",
+        "description": "Add a single device",
+        "data": {
+          "device_name": "Device Name",
+          "device_type": "Device Type",
+          "device_address": "Device Address"
+        }
+      },
+      "add_scene": {
+        "title": "Add Scene",
+        "description": "Add a single scene",
+        "data": {
+          "scene_name": "Scene Name",
+          "panel_address": "Panel Address",
+          "channel": "Channel",
+          "devices": "Device Names",
+          "operation": "Operation"
+        }
+      }
     }
   }
 }

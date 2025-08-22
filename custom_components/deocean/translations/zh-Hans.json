@@ -2,17 +2,81 @@
   "config": {
     "step": {
       "user": {
-        "description": "\u8bf7\u8f93\u5165\u60a8\u7684\u65e0\u7ebf\u7f51\u5173\u0049\u0050\u5730\u5740\u4ee5\u53ca\u7aef\u53e3\u002c\u76ee\u524d\u4ec5\u652f\u6301\u7a97\u5e18\u706f\u5177\u002c\u7a7a\u8c03\u8bf7\u76f4\u63a5\u4f7f\u7528\u007a\u0068\u006f\u006e\u0067\u0068\u006f\u006e\u0067",
-        "title": "\u5fb7\u80fd\u68ee\u0028\u706f\u5177\u002f\u7a97\u5e18\u0029\u914d\u7f6e",
+        "description": "请输入德能森网关的IP地址和端口",
+        "title": "德能森网关连接",
         "data": {
-          "host": "\u7f51\u5173\u0049\u0050\u5730\u5740",
-          "port": "\u7aef\u53e3"
+          "host": "网关IP地址",
+          "port": "端口"
+        }
+      },
+      "devices": {
+        "description": "配置您的设备（灯具和窗帘）。每行一个设备，格式：设备名, 类型(light|blind), 地址。以#开头的行为注释。",
+        "title": "设备配置",
+        "data": {
+          "devices": "设备配置（支持多行）"
+        }
+      },
+      "scenes": {
+        "description": "配置您的场景。每行一个场景，格式：场景名, 面板地址, 通道, 设备名, 操作。以#开头的行为注释。",
+        "title": "场景配置",
+        "data": {
+          "scenes": "场景配置（支持多行）"
         }
       }
     },
+    "error": {
+      "cannot_connect": "无法连接到网关"
+    },
     "abort": {
-      "one_instance_allowed": "\u914d\u7f6e\u4e00\u4e2a\u5c31\u591f\u4e86\u002c\u5f04\u90a3\u4e48\u591a\u5e72\u561b\u003f\u0021",
-      "can_not_establish_connection": "\u65e0\u6cd5\u4e0e\u670d\u52a1\u5668\u5efa\u7acb\u8fde\u63a5\u002c\u8bf7\u786e\u8ba4\u0049\u0050\u662f\u5426\u6b63\u786e"
+      "single_instance_allowed": "只允许一个实例",
+      "cannot_connect": "无法建立连接"
+    }
+  },
+  "options": {
+    "step": {
+      "menu": {
+        "title": "德能森配置",
+        "menu_options": {
+          "devices": "管理所有设备",
+          "scenes": "管理所有场景",
+          "add_device": "添加单个设备",
+          "add_scene": "添加单个场景"
+        }
+      },
+      "devices": {
+        "title": "设备配置",
+        "description": "编辑所有设备配置。每行一个设备，以#开头的行为注释。",
+        "data": {
+          "devices": "设备配置（支持多行）"
+        }
+      },
+      "scenes": {
+        "title": "场景配置",
+        "description": "编辑所有场景配置。每行一个场景，以#开头的行为注释。",
+        "data": {
+          "scenes": "场景配置（支持多行）"
+        }
+      },
+      "add_device": {
+        "title": "添加设备",
+        "description": "添加单个设备",
+        "data": {
+          "device_name": "设备名称",
+          "device_type": "设备类型",
+          "device_address": "设备地址"
+        }
+      },
+      "add_scene": {
+        "title": "添加场景",
+        "description": "添加单个场景",
+        "data": {
+          "scene_name": "场景名称",
+          "panel_address": "面板地址",
+          "channel": "通道",
+          "devices": "设备名称",
+          "operation": "操作"
+        }
+      }
     }
   }
 }

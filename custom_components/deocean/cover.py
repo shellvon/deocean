@@ -8,8 +8,9 @@ from homeassistant.components.cover import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .hub import DeoceanDevice, DeoceanGateway, TypeCode
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities
@@ -33,7 +34,7 @@ class DeoceanCover(CoverEntity):
 
     async def async_added_to_hass(self) -> None:
         self.dev.register_update_callback(self._on_device_update)
-    
+
     def _on_device_update(self, device):
         """设备状态更新回调"""
         # 当设备状态更新时，清除目标位置，避免一直显示opening/closing
@@ -50,6 +51,22 @@ class DeoceanCover(CoverEntity):
     @property
     def unique_id(self):
         return self.dev.unique_id
+
+    @property
+    def device_info(self):
+        """返回设备信息 - 所有窗帘都属于同一个网关设备"""
+        return {
+            "identifiers": {(DOMAIN, f"gateway_{self.dev.gw.ip_addr}")},
+            "name": f"德能森网关 ({self.dev.gw.ip_addr})",
+            "manufacturer": "德能森",
+            "model": "智能网关",
+            "sw_version": VERSION,
+        }
+
+    @property
+    def available(self) -> bool:
+        """设备是否可用"""
+        return self.dev.gw._listening
 
     @property
     def supported_features(self):
@@ -88,16 +105,18 @@ class DeoceanCover(CoverEntity):
             return None
         return self.target_pos < self.current_cover_position
 
-    def open_cover(self, **kwargs) -> None:
+    async def async_open_cover(self, **kwargs) -> None:
+        """异步打开窗帘"""
         kwargs["position"] = 100
-        # 这样可以设置target_pos 从而准确判断是否开启/关闭
-        self.set_cover_position(**kwargs)
+        await self.async_set_cover_position(**kwargs)
 
-    def close_cover(self, **kwargs) -> None:
+    async def async_close_cover(self, **kwargs) -> None:
+        """异步关闭窗帘"""
         kwargs["position"] = 0
-        self.set_cover_position(**kwargs)
+        await self.async_set_cover_position(**kwargs)
 
-    def set_cover_position(self, **kwargs):
+    async def async_set_cover_position(self, **kwargs):
+        """异步设置窗帘位置"""
         target_pos = kwargs.get("position")
         self.target_pos = target_pos
-        self.dev.set_position(target_pos)
+        await self.hass.async_add_executor_job(self.dev.set_position, target_pos)
